@@ -1,4 +1,4 @@
-import os, json, argparse
+import os, json, argparse, requests
 import libtmux, htb
 from box import Box
 
@@ -6,6 +6,7 @@ parser = argparse.ArgumentParser(description='What box do you want to pwn?')
 parser.add_argument('--box', required=True)
 name = parser.parse_args()
 api = htb.HTB('OwBnueBa1zprFdqbWRQnNiXpyr0T1lIkZFQrwGUK0xnjD4Rs3yQxuUEGlHec')
+BASE_URL = 'https://www.hackthebox.eu/api'
 listOfBoxes = []
 #print(a.get_machine(7))
 #print(type(a.get_machine(7)))
@@ -34,14 +35,43 @@ def printAllBoxes():
     #print(res)
     #list = res.get("name")
 
-def getBoxIP(name: str):
+def getBoxIP(name: str) -> str:
     for box in listOfBoxes:
         #for attribute, value in box.__dict__.items():
-        if box.__dict__.get("name") == name.box:
-            print(box.__dict__.get("ip"))
+        if box.name == name.box:
+            print(box.ip)
+            return box.ip
+            #box.spawned
         #if box.get("name") == name:
         #    print(box["ip"])
 
+def getBoxID(name: str) -> str:
+    for box in listOfBoxes:
+        #for attribute, value in box.__dict__.items():
+        if box.name == name.box:
+            print(box.id)
+            return box.id
+            #box.spawned
+        #if box.get("name") == name:
+        #    print(box["ip"])
+
+def auth(path: str) -> str:
+        """
+        Helper function to generate an authenticated URL
+        :params self: HTB object in use
+        :params path: string containing path to query
+        :returns: path to authenticated query
+        """
+        print("{}?api_token={}".format(path, api.api_key))
+        return "{}?api_token={}".format(path, api.api_key)
+
+
+def controlBox(name: str, action: str):
+    mid = getBoxID(name)
+    print(mid)
+    r = requests.post(BASE_URL + auth('/vm/vip/{}/{}'.format(action, mid)), headers=api.headers).json()
+    if r["success"] != 1:
+        print("Error:" + (r["status"]))
 
 def workflow():
     os.system("xfce4-terminal -e 'tmux new-session -s sisc'")
@@ -50,10 +80,10 @@ def workflow():
     session = server.get_by_id('$0')
     window = session.attached_window
     window.rename_window('vpn')
-
     session.new_window(attach=False, window_name="nmap")
 
 initBoxes()
-print_all_boxes()
+#Switch to assign/remove box
+controlBox(name, "remove")
+#printAllBoxes()
 #workflow()
-getBoxIP(name)
