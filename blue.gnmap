@@ -1,0 +1,4 @@
+# Nmap 7.60 scan initiated Sun Apr 26 19:01:49 2020 as: nmap --script vuln -sC -sV -Pn -oA blue 10.10.10.40
+Host: 10.10.10.40 ()	Status: Up
+Host: 10.10.10.40 ()	Ports: 135/open/tcp//msrpc//Microsoft Windows RPC/, 139/open/tcp//netbios-ssn//Microsoft Windows netbios-ssn/, 445/open/tcp//microsoft-ds//Microsoft Windows 7 - 10 microsoft-ds (workgroup: WORKGROUP)/, 49152/open/tcp//msrpc//Microsoft Windows RPC/, 49153/open/tcp//msrpc//Microsoft Windows RPC/, 49154/open/tcp//msrpc//Microsoft Windows RPC/, 49155/open/tcp//msrpc//Microsoft Windows RPC/, 49156/open/tcp//msrpc//Microsoft Windows RPC/, 49157/open/tcp//msrpc//Microsoft Windows RPC/	Ignored State: closed (991)
+# Nmap done at Sun Apr 26 19:03:56 2020 -- 1 IP address (1 host up) scanned in 127.87 seconds

