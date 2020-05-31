@@ -1,0 +1,6 @@
+port,service,CVE,exploit,os
+445,microsoft-ds,CVE-2017-0143,windows/smb/ms17_010_eternalblue,windows
+445,microsoft-ds,CVE-2017-0143,windows/smb/ms17_010_psexec,windows
+20,vsftpd,CVE-2011-2523,unix/ftp/vsftpd_234_backdoor,linux
+21,vsftpd,CVE-2011-2523,unix/ftp/vsftpd_234_backdoor,linux
+1433,mssql,CVE-2008-5416,windows/mssql/ms09_004_sp_replwritetovarbin_sqli,windows

@@ -2,6 +2,7 @@ import os, json, argparse, requests, time, csv, re
 import libtmux, htb, nmap
 from box import Box
 import pandas as pd
+import numpy as np
 import cve_searchsploit as CS
 import getsploit
 import pyperclip
@@ -13,6 +14,9 @@ import socketserver
 import sys,socket,pty
 import sqlite3
 import tensorflow as tf
+from tensorflow import feature_column
+from tensorflow.keras import layers
+from sklearn.model_selection import train_test_split
 
 
 api = htb.HTB('OwBnueBa1zprFdqbWRQnNiXpyr0T1lIkZFQrwGUK0xnjD4Rs3yQxuUEGlHec')
@@ -184,6 +188,61 @@ def exploitsDB():
     # Just be sure any changes have been committed or they will be lost.
     conn.close()
 
+def selectExploit():
+    csv = "autopen_dataset.csv"
+    dataframe = pd.read_csv(csv)
+    dataframe.head()
+    train, test = train_test_split(dataframe, test_size=0.2)
+    train, val = train_test_split(train, test_size=0.2)
+    print(len(train), 'train examples')
+    print(len(val), 'validation examples')
+    print(len(test), 'test examples')
+    batch_size = 5 # A small batch sized is used for demonstration purposes
+    train_ds = df_to_dataset(train, batch_size=batch_size)
+    val_ds = df_to_dataset(val, shuffle=False, batch_size=batch_size)
+    test_ds = df_to_dataset(test, shuffle=False, batch_size=batch_size)
+    for feature_batch, label_batch in train_ds.take(1):
+      print('Every feature:', list(feature_batch.keys()))
+      print('A batch of services:', feature_batch['service'])
+      print('A batch of exploits:', label_batch )
+    feature_columns = []
+    # indicator cols
+    os = feature_column.categorical_column_with_vocabulary_list(
+          'os', ['windows', 'unix'])
+    os_one_hot = feature_column.indicator_column(os)
+    feature_columns.append(os_one_hot)
+    feature_layer = tf.keras.layers.DenseFeatures(feature_columns)
+    # batch_size = 32
+    # train_ds = df_to_dataset(train, batch_size=batch_size)
+    # val_ds = df_to_dataset(val, shuffle=False, batch_size=batch_size)
+    # test_ds = df_to_dataset(test, shuffle=False, batch_size=batch_size)
+    model = tf.keras.Sequential([
+      feature_layer,
+      layers.Dense(128, activation='relu'),
+      layers.Dense(128, activation='relu'),
+      layers.Dense(1)
+    ])
+    model.compile(optimizer='adam',
+                  loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
+                  metrics=['accuracy'])
+    model.fit(train_ds,
+              validation_data=val_ds,
+              epochs=2)
+    loss, accuracy = model.evaluate(test_ds)
+    print("Accuracy", accuracy)
+
+
+
+# A utility method to create a tf.data dataset from a Pandas Dataframe
+def df_to_dataset(dataframe, shuffle=True, batch_size=32):
+  dataframe = dataframe.copy()
+  labels = dataframe.pop('exploit')
+  ds = tf.data.Dataset.from_tensor_slices((dict(dataframe), labels))
+  if shuffle:
+    ds = ds.shuffle(buffer_size=len(dataframe))
+  ds = ds.batch(batch_size)
+  return ds
+
 def workflow():
     #Clean temporary files
     #cleanTemporaryFiles()
@@ -234,11 +293,18 @@ def workflow():
     print(client.sessions.list)
     #Interact with the newly opened session
     shell = client.sessions.session(list(client.sessions.list.keys())[0])
+    #if shell not Null:
+        #Adauga exploit in DB pentru serviciu
+        #Fa un CSV
+
     if getBoxOS(name) == "Windows":
         shell.write('getuid')
     elif getBoxOS(name) == "Linux":
         shell.write('whoami')
     shell.read()
+    if shell.read() in ["root", "NT AUTHORITY\\SYSTEM"]:
+        print("BINGO!")
+
     print(shell.run_with_output('pwd'))
     print(shell.run_with_output('search -f user.txt'))
     print(shell.run_with_output('search -f root.txt'))
@@ -255,7 +321,8 @@ if name.action == "assign":
 elif name.action == "remove":
     controlBox(name, "remove")
 #printAllBoxes()
-workflow()
+selectExploit()
+#workflow()
 
 # productList = []
 # with open('nmapOutput.csv', newline='') as csvfile:
