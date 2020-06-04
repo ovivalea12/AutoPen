@@ -191,7 +191,7 @@ def exploitsDB():
 def selectExploit():
     csv = "autopen_dataset.csv"
     dataframe = pd.read_csv(csv)
-    dataframe.head()
+    print(dataframe.head())
     train, test = train_test_split(dataframe, test_size=0.2)
     train, val = train_test_split(train, test_size=0.2)
     print(len(train), 'train examples')
@@ -201,16 +201,34 @@ def selectExploit():
     train_ds = df_to_dataset(train, batch_size=batch_size)
     val_ds = df_to_dataset(val, shuffle=False, batch_size=batch_size)
     test_ds = df_to_dataset(test, shuffle=False, batch_size=batch_size)
-    for feature_batch, label_batch in train_ds.take(1):
+    print("Train dataset")
+    for feature_batch, label_batch in train_ds:
       print('Every feature:', list(feature_batch.keys()))
       print('A batch of services:', feature_batch['service'])
       print('A batch of exploits:', label_batch )
     feature_columns = []
     # indicator cols
     os = feature_column.categorical_column_with_vocabulary_list(
-          'os', ['windows', 'unix'])
+          'os', ['windows', 'linux'])
     os_one_hot = feature_column.indicator_column(os)
     feature_columns.append(os_one_hot)
+    service = feature_column.categorical_column_with_vocabulary_list(
+          'service', ['microsoft-ds', 'vsftpd', 'mssql'])
+    service_one_hot = feature_column.indicator_column(service)
+    feature_columns.extend(service_one_hot)
+    print("Validation dataset")
+    for feature_batch, label_batch in val_ds:
+      print('Every feature:', list(feature_batch.keys()))
+      print('A batch of services:', feature_batch['service'])
+      print('A batch of exploits:', label_batch )
+    print("Test dataset")
+    for feature_batch, label_batch in test_ds:
+      print('Every feature:', list(feature_batch.keys()))
+      print('A batch of services:', feature_batch['service'])
+      print('A batch of exploits:', label_batch )
+    print(type(feature_columns))
+    for i in feature_columns:
+        print(i)
     feature_layer = tf.keras.layers.DenseFeatures(feature_columns)
     # batch_size = 32
     # train_ds = df_to_dataset(train, batch_size=batch_size)
@@ -314,12 +332,12 @@ def workflow():
 #parseArgs()
 if name.init == "yes":
     initialSetup()
-initBoxes()
-#Switch to assign/remove box
-if name.action == "assign":
-    controlBox(name, "assign")
-elif name.action == "remove":
-    controlBox(name, "remove")
+# initBoxes()
+# #Switch to assign/remove box
+# if name.action == "assign":
+#     controlBox(name, "assign")
+# elif name.action == "remove":
+#     controlBox(name, "remove")
 #printAllBoxes()
 selectExploit()
 #workflow()
