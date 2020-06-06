@@ -4,3 +4,16 @@ port,service,CVE,exploit,os
 20,vsftpd,CVE-2011-2523,unix/ftp/vsftpd_234_backdoor,linux
 21,vsftpd,CVE-2011-2523,unix/ftp/vsftpd_234_backdoor,linux
 1433,mssql,CVE-2008-5416,windows/mssql/ms09_004_sp_replwritetovarbin_sqli,windows
+3389,ms-wbt-server,CVE-2019-0708,windows/rdp/cve_2019_0708_bluekeep_rce,windows
+*,windows,CVE-2018-8120,windows/local/ms18_8120_win32k_privesc,windows
+445,microsoft-ds,CVE-2015-0925,windows/smb/ipass_pipe_exec,windows
+445,microsoft-ds,CVE-2008–4250,windows/smb/ms08_067_netapi,windows
+4322,scada,CVE-2011-4051,windows/scada/indusoft_webstudio_exec,windows
+6667,UnrealIRCD,CVE-2010-2075,unix/irc/unreal_ircd_3281_backdoor,linux
+3632,distccd,CVE-2004-2687,unix/misc/distcc_exec,linux
+139,netbios-ssn,CVE-2007-2447,multi/samba/usermap_script,linux
+139,netbios-ssn,CVE-2007-2447,multi/samba/usermap_script,windows
+1099,rmiregistry,CVE-2011-3556,multi/misc/java_rmi_server,linux
+1099,rmiregistry,CVE-2011-3556,multi/misc/java_rmi_server,windows
+8180,http,CVE-2012-1823,multi/http/php_cgi_arg_injection,linux
+8180,http,CVE-2012-1823,multi/http/php_cgi_arg_injection,windows
