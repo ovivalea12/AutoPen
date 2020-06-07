@@ -17,6 +17,16 @@ import tensorflow as tf
 from tensorflow import feature_column
 from tensorflow.keras import layers
 from sklearn.model_selection import train_test_split
+import pandas as pd
+from sklearn.tree import DecisionTreeClassifier # Import Decision Tree Classifier
+from sklearn import metrics #Import scikit-learn metrics module for accuracy calculation
+from sklearn.tree import export_graphviz
+from sklearn import preprocessing
+from sklearn import tree
+from IPython.display import Image
+import pydotplus
+import graphviz
+from sklearn.metrics import classification_report, confusion_matrix
 
 
 api = htb.HTB('OwBnueBa1zprFdqbWRQnNiXpyr0T1lIkZFQrwGUK0xnjD4Rs3yQxuUEGlHec')
@@ -80,7 +90,7 @@ def getBoxID(name: str) -> str:
 def getBoxOS(name: str) -> str:
     for box in listOfBoxes:
         if box.name == name.box:
-            print(box.os)
+            #print(box.os)
             return box.os
 
 def auth(path: str) -> str:
@@ -111,6 +121,28 @@ def getCVEsFromNmap():
             for cve in cves:
                 cveList.append(cve)
     return cveList
+
+def getPortAndServiceFromNmap():
+    with open(name.box + ".nmap", newline='') as nmapfile:
+        infos=[]
+        lines = nmapfile.read().splitlines()
+        for line in lines:
+            info = []
+            port = re.findall(r'\d+/tcp', line)
+            if port:
+                p = port[0].split('/')[0]
+                info.append(p)
+            service = re.findall(r'open\s+\w+-*\w*', line)
+            if service:
+                #s = service[0].split(r'\s+')[1]
+                s = re.split('\s+', service[0])[1]
+                if s not in ['spoofing', 'denial']:
+                    info.append(s)
+            if info:
+                infos.append(info)
+            # for cve in cves:
+            #     cveList.append(cve)
+    return infos
 
 def searchExploits(cveList):
     exploitList = []
@@ -209,7 +241,7 @@ def selectExploit():
     feature_columns = []
     # indicator cols
     os = feature_column.categorical_column_with_vocabulary_list(
-          'os', ['windows', 'linux'])
+          'os', ['Windows', 'Linux'])
     os_one_hot = feature_column.indicator_column(os)
     feature_columns.append(os_one_hot)
     service = feature_column.categorical_column_with_vocabulary_list(
@@ -261,6 +293,70 @@ def df_to_dataset(dataframe, shuffle=True, batch_size=32):
   ds = ds.batch(batch_size)
   return ds
 
+
+
+#input: machineInfo, output: string (exploit)
+def predictExploit(machineInfo):
+    col_names = ['port', 'service', 'cve', 'exploit', 'os']
+    # load dataset
+    autopen_data = pd.read_csv("autopen_dataset.csv", header=None, names=col_names)
+    autopen_data = autopen_data.iloc[1:]
+    print(autopen_data.head())
+    one_hot_data = pd.get_dummies(autopen_data[['port', 'service', 'cve', 'os']])
+    print(one_hot_data)
+    #split dataset in features and target variable
+    X = one_hot_data
+    y = autopen_data['exploit']
+    # Split dataset into training set and test set
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=1) # 70% training and 30% test
+    # Create Decision Tree classifer object
+    clf = tree.DecisionTreeClassifier()
+    # DecisionTreeClassifier(class_weight=None, criterion='gini', max_depth=None,
+    #             max_features=None, max_leaf_nodes=None,
+    #             min_impurity_decrease=0.0, min_impurity_split=None,
+    #             min_samples_leaf=1, min_samples_split=2,
+    #             min_weight_fraction_leaf=0.0, presort=False, random_state=None,
+    #             splitter='best')
+    #clf = DecisionTreeClassifier(criterion="entropy", max_depth=3)
+    # Train Decision Tree Classifer
+    clf = clf.fit(X_train,y_train)
+    print(X_test)
+    print(X_test['port_1099'])
+    print("masina", machineInfo)
+    print(X_test['port_' + machineInfo[0]])
+    for i in X_test:
+        print(i)
+    if X_test['port_' + machineInfo[0]] == 1 and X_test['service_' + machineInfo[1]] == 1 and X_test['cve_' + machineInfo[2]] == 1 and X_test['os_' + machineInfo[3]] == 1:
+        y_pred = clf.predict(X_test)
+    #prediction = clf.predict(x)
+    #445,microsoft-ds,CVE-2017-0143,windows/smb/ms17_010_psexec,windows
+    #prediction = clf.predict([[0,0,0,1,1,0,0,0,0,1,0,1]])
+    #print(prediction)
+    #for i in prediction:
+    #    print(i)
+    # Model Accuracy, how often is the classifier correct?
+    score = metrics.accuracy_score(y_test, y_pred) * 100
+    print("Accuracy:", round(score, 1), "%")
+    print(confusion_matrix(y_test, y_pred))
+    print(classification_report(y_test, y_pred))
+    #return y_pred
+
+
+def generateDecisionTreeImage(clf):
+    tree.plot_tree(clf)
+    #dot_data = tree.export_graphviz(clf, out_file=None, feature_names=list(one_hot_data.columns.values))
+    dot_data = tree.export_graphviz(clf, out_file=None,
+                                    feature_names=list(one_hot_data.columns.values),
+                                    filled=True, rounded=True, special_characters=True,
+                                    class_names=autopen_data['exploit'].unique())
+    print(dot_data)
+    graph = graphviz.Source(dot_data)
+    graph.render("test")
+
+    # pydot_graph = pydotplus.graph_from_dot_data(dot_data)
+    # Image(pydot_graph.create_png())
+
+
 def workflow():
     #Clean temporary files
     #cleanTemporaryFiles()
@@ -270,6 +366,9 @@ def workflow():
     cveList = getCVEsFromNmap()
     cveList = list(dict.fromkeys(cveList))
     print(cveList)
+    #Get open ports and services
+    infoList = getPortAndServiceFromNmap()
+    print(infoList)
     #Search for exploits using searchsploit
     # exploitList = searchExploits(cveList)
     # print(exploitList)
@@ -296,6 +395,7 @@ def workflow():
                 exploit['RHOST'] = getBoxIP(name)
             #Choose payload to use
             #print(exploit.targetpayloads())
+            predictExploit(machineInfo)
             if getBoxOS(name) == "Windows":
                 if exploitName in ["windows/smb/ms17_010_eternalblue", "windows/smb/smb_doublepulsar_rce"]:
                     payload = client.modules.use('payload', 'windows/x64/meterpreter/reverse_tcp')
@@ -332,14 +432,37 @@ def workflow():
 #parseArgs()
 if name.init == "yes":
     initialSetup()
-# initBoxes()
+initBoxes()
 # #Switch to assign/remove box
-# if name.action == "assign":
-#     controlBox(name, "assign")
-# elif name.action == "remove":
-#     controlBox(name, "remove")
+if name.action == "assign":
+    controlBox(name, "assign")
+elif name.action == "remove":
+    controlBox(name, "remove")
 #printAllBoxes()
-selectExploit()
+# selectExploit()
+machineInfo = []
+infoList = getPortAndServiceFromNmap()
+print(infoList)
+for i in infoList:
+    print(i)
+cveList = getCVEsFromNmap()
+cveList = list(dict.fromkeys(cveList))
+print(cveList)
+#machine info = [port, service, CVE, os]
+for cve in cveList:
+    for info in infoList:
+        if len(info) > 1:
+            #print(info[0]," ",info[1]," ",cve," ",getBoxOS(name))
+            machineInfo.append(info[0])
+            machineInfo.append(info[1])
+            machineInfo.append(cve)
+            machineInfo.append(getBoxOS(name))
+            print(machineInfo)
+            exploit = predictExploit(machineInfo)
+            print(exploit)
+        machineInfo = []
+#exploit = predictExploit(machineInfo)
+#print(exploit)
 #workflow()
 
 # productList = []
